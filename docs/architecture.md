@@ -1,0 +1,3 @@
+# Architecture
+
+## File Upload Strategy

@@ -1,0 +1,41 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: inayear
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/inayear
+    depends_on:
+      - db
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8000
+
+  storage:
+    image: rustfs/rustfs
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      RUSTFS_ROOT_USER: rustfs
+      RUSTFS_ROOT_PASSWORD: rustfspass
+    volumes:
+      - rustfs_data:/data
+    command: server /data --console-address ":9001"
+
+volumes:
+  postgres_data:
+  rustfs_data:
+
+networks:
+  default:
+    driver: bridge

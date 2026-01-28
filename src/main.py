@@ -1,0 +1,27 @@
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+
+from src.api import router as api_router
+from src.db.database import init_db
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await init_db()
+    yield
+
+
+app = FastAPI(
+    title="In a Year",
+    description="Show your year in stats from connected services",
+    version="0.1.0",
+    lifespan=lifespan,
+)
+
+app.include_router(api_router, prefix="/api/v1")
+
+
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy"}
