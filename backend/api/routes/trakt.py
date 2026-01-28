@@ -100,35 +100,6 @@ async def sync_history(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.get("/history")
-async def get_history(
-    user_id: str,
-    year: int = Query(..., ge=2000, le=2100),
-    month: int | None = Query(None, ge=1, le=12),
-    media_type: str | None = Query(None, pattern="^(movies|episodes)$"),
-    db: AsyncSession = Depends(get_db),
-):
-    """
-    Fetch watch history directly from Trakt API.
-
-    - year: Required. The year to fetch (e.g., 2025)
-    - month: Optional. If provided, only fetch that month (1-12)
-    - media_type: Optional. Filter by 'movies' or 'episodes'
-    """
-    from backend.services.trakt import get_date_range
-
-    service = TraktService(db)
-    try:
-        start_at, end_at = get_date_range(year, month)
-        history = await service.fetch_history(user_id, start_at, end_at, media_type)
-        period = f"{year}/{month}" if month else str(year)
-        return {"count": len(history), "period": period, "history": history}
-    except TraktAuthError as e:
-        if str(e) == "not_authenticated":
-            raise HTTPException(status_code=401, detail="User not authenticated with Trakt")
-        raise HTTPException(status_code=400, detail=str(e))
-
-
 @router.get("/stats/{year}", response_model=YearStatsResponse)
 async def get_trakt_stats(
     year: int,
@@ -182,7 +153,7 @@ async def sync_multiple_years_task(
     if not token:
         raise HTTPException(status_code=401, detail="User not authenticated with Trakt")
 
-    task = sync_trakt_history_full.delay(user_id, start_year, end_year) # type: ignore
+    task = sync_trakt_history_full.delay(user_id, start_year, end_year)  # type: ignore
     return {
         "task_id": task.id,
         "status": "started",

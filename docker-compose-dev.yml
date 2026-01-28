@@ -44,7 +44,59 @@ services:
     command: server /data --console-address ":9001"
     networks:
       - inayear-network
-      
+
+  celery-worker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      DATABASE_HOST: db
+      DATABASE_PORT: 5432
+      DATABASE_NAME: inayear
+      SYNC_DATABASE_URL: postgresql://postgres:postgres@db:5432/inayear
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      TRAKT_CLIENT_ID: ${TRAKT_CLIENT_ID}
+      TRAKT_CLIENT_SECRET: ${TRAKT_CLIENT_SECRET}
+      TRAKT_API_URL: ${TRAKT_API_URL:-https://api.trakt.tv}
+      TMDB_API_KEY: ${TMDB_API_KEY}
+    volumes:
+      - ./backend:/app/backend:ro
+      - ./ml:/app/ml:ro
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - inayear-network
+    command: celery -A backend.worker.celery_app worker --loglevel=info
+
+  celery-beat:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      DATABASE_HOST: db
+      DATABASE_PORT: 5432
+      DATABASE_NAME: inayear
+      SYNC_DATABASE_URL: postgresql://postgres:postgres@db:5432/inayear
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      TRAKT_CLIENT_ID: ${TRAKT_CLIENT_ID}
+      TRAKT_CLIENT_SECRET: ${TRAKT_CLIENT_SECRET}
+      TRAKT_API_URL: ${TRAKT_API_URL:-https://api.trakt.tv}
+    volumes:
+      - ./backend:/app/backend:ro
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - inayear-network
+    command: celery -A backend.worker.celery_app beat --loglevel=info
+
 volumes:
   postgres_data:
   redis_data:
