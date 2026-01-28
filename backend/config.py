@@ -27,3 +27,10 @@ SYNC_DATABASE_URL = os.getenv(
 ALLOWED_ORIGINS = [
     "http://localhost:3000"
 ]
+
+# TMDB API configuration
+TMDB_API_KEY = os.getenv("TMDB_API_KEY", "")
+TMDB_API_URL = os.getenv("TMDB_API_URL", "https://api.themoviedb.org/3")
+
+# ML Model paths
+ML_MODEL_PATH = os.getenv("ML_MODEL_PATH", "ml/models")

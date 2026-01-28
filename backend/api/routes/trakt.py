@@ -149,7 +149,7 @@ async def sync_year_history_task(
     if not token:
         raise HTTPException(status_code=401, detail="User not authenticated with Trakt")
 
-    task = sync_trakt_history_for_year.delay(user_id, year)
+    task = sync_trakt_history_for_year.delay(user_id, year) # type: ignore
     return {"task_id": task.id, "status": "started", "year": year}
 
 
@@ -172,7 +172,7 @@ async def sync_multiple_years_task(
     if not token:
         raise HTTPException(status_code=401, detail="User not authenticated with Trakt")
 
-    task = sync_trakt_history_full.delay(user_id, start_year, end_year)
+    task = sync_trakt_history_full.delay(user_id, start_year, end_year) # type: ignore
     return {
         "task_id": task.id,
         "status": "started",
