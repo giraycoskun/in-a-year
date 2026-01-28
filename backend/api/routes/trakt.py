@@ -1,5 +1,3 @@
-from datetime import datetime
-
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -79,21 +77,22 @@ async def get_auth_status(
 @router.post("/sync", response_model=SyncHistoryResponse)
 async def sync_history(
     user_id: str,
-    request: SyncHistoryRequest | None = None,
+    request: SyncHistoryRequest,
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Sync user's watch history from Trakt.
-    Optionally specify start_at and end_at to sync a specific date range.
+    Sync user's watch history from Trakt for a specific year or month.
+
+    - year: Required. The year to sync (e.g., 2025)
+    - month: Optional. If provided, only sync that month (1-12)
     """
     service = TraktService(db)
     try:
-        start_at = request.start_at if request else None
-        end_at = request.end_at if request else None
-        count = await service.sync_user_history(user_id, start_at, end_at)
+        count = await service.sync_user_history(user_id, request.year, request.month)
+        period = f"{request.year}/{request.month}" if request.month else str(request.year)
         return SyncHistoryResponse(
             synced_count=count,
-            message=f"Successfully synced {count} new watch entries",
+            message=f"Successfully synced {count} new watch entries for {period}",
         )
     except TraktAuthError as e:
         if str(e) == "not_authenticated":
@@ -104,19 +103,26 @@ async def sync_history(
 @router.get("/history")
 async def get_history(
     user_id: str,
-    start_at: datetime | None = Query(None),
-    end_at: datetime | None = Query(None),
-    media_type: str | None = Query(None, regex="^(movies|episodes)$"),
+    year: int = Query(..., ge=2000, le=2100),
+    month: int | None = Query(None, ge=1, le=12),
+    media_type: str | None = Query(None, pattern="^(movies|episodes)$"),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Fetch watch history directly from Trakt API.
-    Use /sync to persist data to the database.
+
+    - year: Required. The year to fetch (e.g., 2025)
+    - month: Optional. If provided, only fetch that month (1-12)
+    - media_type: Optional. Filter by 'movies' or 'episodes'
     """
+    from backend.services.trakt import get_date_range
+
     service = TraktService(db)
     try:
+        start_at, end_at = get_date_range(year, month)
         history = await service.fetch_history(user_id, start_at, end_at, media_type)
-        return {"count": len(history), "history": history}
+        period = f"{year}/{month}" if month else str(year)
+        return {"count": len(history), "period": period, "history": history}
     except TraktAuthError as e:
         if str(e) == "not_authenticated":
             raise HTTPException(status_code=401, detail="User not authenticated with Trakt")
@@ -138,19 +144,23 @@ async def get_trakt_stats(
 async def sync_year_history_task(
     year: int,
     user_id: str,
+    month: int | None = Query(None, ge=1, le=12),
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Start a background task to sync all Trakt history for a specific year.
-    Returns a task ID to track progress.
+    Start a background task to sync Trakt history for a specific year or month.
+
+    - year: The year to sync (e.g., 2025)
+    - month: Optional. If provided, only sync that month (1-12)
     """
     service = TraktService(db)
     token = await service.get_token(user_id)
     if not token:
         raise HTTPException(status_code=401, detail="User not authenticated with Trakt")
 
-    task = sync_trakt_history_for_year.delay(user_id, year) # type: ignore
-    return {"task_id": task.id, "status": "started", "year": year}
+    task = sync_trakt_history_for_year.delay(user_id, year, month)  # type: ignore
+    period = f"{year}/{month}" if month else str(year)
+    return {"task_id": task.id, "status": "started", "period": period, "year": year, "month": month}
 
 
 @router.post("/sync/years")

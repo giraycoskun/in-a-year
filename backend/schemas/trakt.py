@@ -27,8 +27,8 @@ class AuthStatusResponse(BaseModel):
 
 
 class SyncHistoryRequest(BaseModel):
-    start_at: datetime | None = None
-    end_at: datetime | None = None
+    year: int
+    month: int | None = None
 
 
 class SyncHistoryResponse(BaseModel):

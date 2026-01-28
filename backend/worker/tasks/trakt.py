@@ -1,3 +1,4 @@
+import calendar
 from datetime import datetime, timedelta
 
 import httpx
@@ -7,6 +8,18 @@ from sqlalchemy.orm import Session
 from backend.config import SYNC_DATABASE_URL, TRAKT_API_URL, TRAKT_CLIENT_ID, TRAKT_CLIENT_SECRET
 from backend.db.models.trakt import TraktToken, WatchHistory
 from backend.worker.celery_app import celery_app
+
+
+def get_date_range(year: int, month: int | None = None) -> tuple[datetime, datetime]:
+    """Get start and end datetime for a year or specific month."""
+    if month:
+        start_at = datetime(year, month, 1)
+        last_day = calendar.monthrange(year, month)[1]
+        end_at = datetime(year, month, last_day, 23, 59, 59)
+    else:
+        start_at = datetime(year, 1, 1)
+        end_at = datetime(year, 12, 31, 23, 59, 59)
+    return start_at, end_at
 
 engine = create_engine(SYNC_DATABASE_URL)
 
@@ -61,14 +74,14 @@ def get_valid_token_sync(db: Session, user_id: str) -> str:
     return token.access_token
 
 
-def fetch_history_for_year_sync(
+def fetch_history_sync(
     access_token: str,
     year: int,
+    month: int | None = None,
     media_type: str | None = None,
 ) -> list[dict]:
-    """Fetch watch history for a specific year (sync version)."""
-    start_at = datetime(year, 1, 1)
-    end_at = datetime(year, 12, 31, 23, 59, 59)
+    """Fetch watch history for a specific year or month (sync version)."""
+    start_at, end_at = get_date_range(year, month)
 
     url = f"{TRAKT_API_URL}/users/me/history"
     if media_type:
@@ -169,13 +182,16 @@ def process_and_store_history_sync(
 
 
 @celery_app.task(bind=True, max_retries=3)  # type: ignore[misc]
-def sync_trakt_history_for_year(self, user_id: str, year: int) -> dict:  # type: ignore[no-untyped-def]
+def sync_trakt_history_for_year(  # type: ignore[no-untyped-def]
+    self, user_id: str, year: int, month: int | None = None
+) -> dict:
     """
-    Celery task to fetch and store all Trakt history for a user in a given year.
+    Celery task to fetch and store Trakt history for a user in a given year or month.
 
     Args:
         user_id: The user identifier
         year: The year to sync history for
+        month: Optional month (1-12) to sync only that month
 
     Returns:
         dict with sync results
@@ -183,13 +199,16 @@ def sync_trakt_history_for_year(self, user_id: str, year: int) -> dict:  # type:
     try:
         with Session(engine) as db:
             access_token = get_valid_token_sync(db, user_id)
-            history = fetch_history_for_year_sync(access_token, year)
+            history = fetch_history_sync(access_token, year, month)
             synced_count = process_and_store_history_sync(db, user_id, history)
 
+            period = f"{year}/{month}" if month else str(year)
             return {
                 "status": "success",
                 "user_id": user_id,
+                "period": period,
                 "year": year,
+                "month": month,
                 "total_fetched": len(history),
                 "new_entries": synced_count,
             }
@@ -198,7 +217,9 @@ def sync_trakt_history_for_year(self, user_id: str, year: int) -> dict:  # type:
 
 
 @celery_app.task(bind=True, max_retries=3)  # type: ignore[misc]
-def sync_trakt_history_full(self, user_id: str, start_year: int, end_year: int) -> dict:  # type: ignore[no-untyped-def]
+def sync_trakt_history_full(  # type: ignore[no-untyped-def]
+    self, user_id: str, start_year: int, end_year: int
+) -> dict:
     """
     Celery task to sync Trakt history across multiple years.
 
@@ -219,7 +240,7 @@ def sync_trakt_history_full(self, user_id: str, start_year: int, end_year: int) 
             access_token = get_valid_token_sync(db, user_id)
 
             for year in range(start_year, end_year + 1):
-                history = fetch_history_for_year_sync(access_token, year)
+                history = fetch_history_sync(access_token, year)
                 synced_count = process_and_store_history_sync(db, user_id, history)
 
                 results.append({

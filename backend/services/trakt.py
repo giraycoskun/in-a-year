@@ -1,3 +1,4 @@
+import calendar
 from datetime import datetime, timedelta
 
 import httpx
@@ -6,6 +7,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.config import TRAKT_API_URL, TRAKT_CLIENT_ID, TRAKT_CLIENT_SECRET
 from backend.db.models.trakt import TraktToken, WatchHistory
+
+
+def get_date_range(year: int, month: int | None = None) -> tuple[datetime, datetime]:
+    """Get start and end datetime for a year or specific month."""
+    if month:
+        start_at = datetime(year, month, 1)
+        last_day = calendar.monthrange(year, month)[1]
+        end_at = datetime(year, month, last_day, 23, 59, 59)
+    else:
+        start_at = datetime(year, 1, 1)
+        end_at = datetime(year, 12, 31, 23, 59, 59)
+    return start_at, end_at
 
 
 class TraktAuthError(Exception):
@@ -245,17 +258,17 @@ class TraktService:
     async def sync_user_history(
         self,
         user_id: str,
-        start_at: datetime | None = None,
-        end_at: datetime | None = None,
+        year: int,
+        month: int | None = None,
     ) -> int:
-        """Fetch and store user's watch history."""
+        """Fetch and store user's watch history for a year or specific month."""
+        start_at, end_at = get_date_range(year, month)
         history = await self.fetch_history(user_id, start_at, end_at)
         return await self.process_and_store_history(user_id, history)
 
     async def get_year_stats(self, user_id: str, year: int) -> dict:
         """Get watching statistics for a specific year."""
-        start_date = datetime(year, 1, 1)
-        end_date = datetime(year, 12, 31, 23, 59, 59)
+        start_date, end_date = get_date_range(year)
 
         stmt = select(WatchHistory).where(
             WatchHistory.user_id == user_id,

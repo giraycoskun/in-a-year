@@ -3,10 +3,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.db.database import get_db
 from backend.schemas.recommendation import (
-    LatestMovie,
     RecommendationResponse,
     RetrainResponse,
-    TrendingMovie,
 )
 from backend.services.recommendation import RecommendationService
 
@@ -40,35 +38,35 @@ async def get_movie_recommendations(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/trending", response_model=list[TrendingMovie])
-async def get_trending_movies(
-    limit: int = Query(20, ge=1, le=100),
-    db: AsyncSession = Depends(get_db),
-):
-    """Get currently trending movies from Trakt."""
-    service = RecommendationService(db)
-    try:
-        return await service.fetch_trending_movies_trakt(limit=limit)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+# @router.get("/trending", response_model=list[TrendingMovie])
+# async def get_trending_movies(
+#     limit: int = Query(20, ge=1, le=100),
+#     db: AsyncSession = Depends(get_db),
+# ):
+#     """Get currently trending movies from Trakt."""
+#     service = RecommendationService(db)
+#     try:
+#         return await service.fetch_trending_movies_trakt(limit=limit)
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/latest", response_model=list[LatestMovie])
-async def get_latest_movies(
-    limit: int = Query(20, ge=1, le=100),
-    db: AsyncSession = Depends(get_db),
-):
-    """Get latest/now playing movies from TMDB."""
-    service = RecommendationService(db)
-    try:
-        movies = await service.fetch_latest_movies_tmdb(limit=limit)
-        if not movies:
-            raise HTTPException(status_code=503, detail="TMDB API key not configured")
-        return movies
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+# @router.get("/latest", response_model=list[LatestMovie])
+# async def get_latest_movies(
+#     limit: int = Query(20, ge=1, le=100),
+#     db: AsyncSession = Depends(get_db),
+# ):
+#     """Get latest/now playing movies from TMDB."""
+#     service = RecommendationService(db)
+#     try:
+#         movies = await service.fetch_latest_movies_tmdb(limit=limit)
+#         if not movies:
+#             raise HTTPException(status_code=503, detail="TMDB API key not configured")
+#         return movies
+#     except HTTPException:
+#         raise
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/retrain", response_model=RetrainResponse)
