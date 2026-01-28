@@ -9,16 +9,13 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-
-  api:
-    build: .
-    ports:
-      - "8000:8000"
-    environment:
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/inayear
-    depends_on:
-      - db
-    command: uvicorn src.main:app --host 0.0.0.0 --port 8000
+    networks:
+      - inayear-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   storage:
     image: rustfs/rustfs
@@ -31,11 +28,36 @@ services:
     volumes:
       - rustfs_data:/data
     command: server /data --console-address ":9001"
+    networks:
+      - inayear-network
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_HOST: db
+      DATABASE_PORT: 5432
+      DATABASE_NAME: inayear
+      POSTGRE_DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/inayear
+      TRAKT_CLIENT_ID: ${TRAKT_CLIENT_ID}
+      TRAKT_CLIENT_SECRET: ${TRAKT_CLIENT_SECRET}
+      TRAKT_API_URL: ${TRAKT_API_URL:-https://api.trakt.tv}
+    volumes:
+      - ./src:/app/src:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - inayear-network
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
 
 volumes:
   postgres_data:
   rustfs_data:
 
 networks:
-  default:
+  inayear-network:
     driver: bridge

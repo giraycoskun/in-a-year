@@ -6,7 +6,7 @@ Projects aims to show in a year stats from connected services such as Spotify fo
 
 ## Features
 
-- Upload your data from multiple services
+- Upload your data/fetch from connected services
 - Data is processed into PostgreSQL database
 - Backend API built with FastAPI
 - Frontend built with Nuxt
