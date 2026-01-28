@@ -23,3 +23,7 @@ SYNC_DATABASE_URL = os.getenv(
     "SYNC_DATABASE_URL",
     f"postgresql://postgres:postgres@{DATABASE_HOST}:{DATABASE_PORT}/{DATABASE_NAME}",
 )
+
+ALLOWED_ORIGINS = [
+    "http://localhost:3000"
+]
