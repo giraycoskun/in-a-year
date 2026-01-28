@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from src.api.routes import hardcover, stats, trakt
+from backend.api.routes import hardcover, stats, trakt
 
 router = APIRouter()
 

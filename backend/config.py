@@ -13,3 +13,13 @@ POSTGRE_DATABASE_URL = os.getenv("POSTGRE_DATABASE_URL", f"postgresql+asyncpg://
 TRAKT_CLIENT_ID = os.getenv("TRAKT_CLIENT_ID", "")
 TRAKT_CLIENT_SECRET = os.getenv("TRAKT_CLIENT_SECRET", "")
 TRAKT_API_URL = os.getenv("TRAKT_API_URL", "https://api.trakt.tv")
+
+# Celery configuration
+CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
+CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
+
+# Sync database URL for Celery (psycopg2)
+SYNC_DATABASE_URL = os.getenv(
+    "SYNC_DATABASE_URL",
+    f"postgresql://postgres:postgres@{DATABASE_HOST}:{DATABASE_PORT}/{DATABASE_NAME}",
+)

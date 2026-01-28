@@ -3,7 +3,7 @@ from datetime import datetime
 from sqlalchemy import DateTime, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
-from src.db.database import Base
+from backend.db.database import Base
 
 
 class TraktToken(Base):

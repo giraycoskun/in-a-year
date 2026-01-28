@@ -3,7 +3,7 @@ from datetime import date
 from sqlalchemy import Date, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from src.db.database import Base
+from backend.db.database import Base
 
 
 class BookRead(Base):

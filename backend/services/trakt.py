@@ -4,8 +4,8 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.config import TRAKT_API_URL, TRAKT_CLIENT_ID, TRAKT_CLIENT_SECRET
-from src.db.models.trakt import TraktToken, WatchHistory
+from backend.config import TRAKT_API_URL, TRAKT_CLIENT_ID, TRAKT_CLIENT_SECRET
+from backend.db.models.trakt import TraktToken, WatchHistory
 
 
 class TraktAuthError(Exception):

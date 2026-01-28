@@ -17,6 +17,20 @@ services:
       timeout: 5s
       retries: 5
 
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - inayear-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   storage:
     image: rustfs/rustfs
     ports:
@@ -42,6 +56,9 @@ services:
       DATABASE_PORT: 5432
       DATABASE_NAME: inayear
       POSTGRE_DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/inayear
+      SYNC_DATABASE_URL: postgresql://postgres:postgres@db:5432/inayear
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
       TRAKT_CLIENT_ID: ${TRAKT_CLIENT_ID}
       TRAKT_CLIENT_SECRET: ${TRAKT_CLIENT_SECRET}
       TRAKT_API_URL: ${TRAKT_API_URL:-https://api.trakt.tv}
@@ -50,12 +67,58 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - inayear-network
     command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
 
+  celery-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_HOST: db
+      DATABASE_PORT: 5432
+      DATABASE_NAME: inayear
+      SYNC_DATABASE_URL: postgresql://postgres:postgres@db:5432/inayear
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      TRAKT_CLIENT_ID: ${TRAKT_CLIENT_ID}
+      TRAKT_CLIENT_SECRET: ${TRAKT_CLIENT_SECRET}
+      TRAKT_API_URL: ${TRAKT_API_URL:-https://api.trakt.tv}
+    volumes:
+      - ./src:/app/src:ro
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - inayear-network
+    command: celery -A src.worker.celery_app worker --loglevel=info
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      NUXT_PUBLIC_API_BASE: http://api:8000/api/v1
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.nuxt
+    depends_on:
+      - api
+    networks:
+      - inayear-network
+    command: npm run dev -- --host 0.0.0.0
+
 volumes:
   postgres_data:
+  redis_data:
   rustfs_data:
 
 networks:

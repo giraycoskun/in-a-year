@@ -3,15 +3,16 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.db.database import get_db
-from src.schemas.trakt import (
+from backend.db.database import get_db
+from backend.schemas.trakt import (
     AuthStatusResponse,
     DeviceCodeResponse,
     SyncHistoryRequest,
     SyncHistoryResponse,
     YearStatsResponse,
 )
-from src.services.trakt import TraktAuthError, TraktService
+from backend.services.trakt import TraktAuthError, TraktService
+from backend.worker.tasks.trakt import sync_trakt_history_for_year, sync_trakt_history_full
 
 router = APIRouter()
 
@@ -131,3 +132,72 @@ async def get_trakt_stats(
     """Get movies/TV watching stats for a specific year."""
     service = TraktService(db)
     return await service.get_year_stats(user_id, year)
+
+
+@router.post("/sync/year/{year}")
+async def sync_year_history_task(
+    year: int,
+    user_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Start a background task to sync all Trakt history for a specific year.
+    Returns a task ID to track progress.
+    """
+    service = TraktService(db)
+    token = await service.get_token(user_id)
+    if not token:
+        raise HTTPException(status_code=401, detail="User not authenticated with Trakt")
+
+    task = sync_trakt_history_for_year.delay(user_id, year)
+    return {"task_id": task.id, "status": "started", "year": year}
+
+
+@router.post("/sync/years")
+async def sync_multiple_years_task(
+    user_id: str,
+    start_year: int = Query(..., ge=2000, le=2100),
+    end_year: int = Query(..., ge=2000, le=2100),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Start a background task to sync Trakt history for multiple years.
+    Returns a task ID to track progress.
+    """
+    if start_year > end_year:
+        raise HTTPException(status_code=400, detail="start_year must be <= end_year")
+
+    service = TraktService(db)
+    token = await service.get_token(user_id)
+    if not token:
+        raise HTTPException(status_code=401, detail="User not authenticated with Trakt")
+
+    task = sync_trakt_history_full.delay(user_id, start_year, end_year)
+    return {
+        "task_id": task.id,
+        "status": "started",
+        "start_year": start_year,
+        "end_year": end_year,
+    }
+
+
+@router.get("/sync/status/{task_id}")
+async def get_sync_task_status(task_id: str):
+    """Get the status of a sync task."""
+    from celery.result import AsyncResult
+
+    from backend.worker.celery_app import celery_app
+
+    result = AsyncResult(task_id, app=celery_app)
+    response = {
+        "task_id": task_id,
+        "status": result.status,
+    }
+
+    if result.ready():
+        if result.successful():
+            response["result"] = result.get()
+        else:
+            response["error"] = str(result.result)
+
+    return response

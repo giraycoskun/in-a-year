@@ -1,7 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
-from src.config import POSTGRE_DATABASE_URL
+from backend.config import POSTGRE_DATABASE_URL
 
 
 class Base(DeclarativeBase):
