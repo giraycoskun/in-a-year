@@ -47,7 +47,7 @@ services:
 
   api:
     build:
-      context: .
+      context: ./backend
       dockerfile: Dockerfile
     ports:
       - "8000:8000"
@@ -75,7 +75,7 @@ services:
 
   celery-worker:
     build:
-      context: .
+      context: ./backend
       dockerfile: Dockerfile
     environment:
       DATABASE_HOST: db
