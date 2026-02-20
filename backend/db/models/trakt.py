@@ -17,6 +17,19 @@ class TraktToken(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class TraktSyncState(Base):
+    __tablename__ = "trakt_sync_state"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(100), unique=True, index=True)
+    last_tracked_sync_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
+
+
 class WatchHistory(Base):
     __tablename__ = "watch_history"
 
@@ -24,7 +37,7 @@ class WatchHistory(Base):
     user_id: Mapped[str] = mapped_column(String(100), index=True)
     trakt_id: Mapped[int] = mapped_column(Integer, index=True)
     title: Mapped[str] = mapped_column(String(500))
-    media_type: Mapped[str] = mapped_column(String(50))  # movie, episode
+    media_type: Mapped[str] = mapped_column(String(50))  # movie, episode, show
     watched_at: Mapped[datetime] = mapped_column(DateTime)
     runtime_minutes: Mapped[int] = mapped_column(Integer, nullable=True)
     year: Mapped[int] = mapped_column(Integer, nullable=True)

@@ -3,6 +3,7 @@
 from datetime import datetime, timedelta
 
 import httpx
+from loguru import logger
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
@@ -45,7 +46,7 @@ def refresh_trakt_token(db: Session, token: TraktToken) -> bool:
         db.commit()
         return True
     except Exception as e:
-        print(f"Failed to refresh token for user {token.user_id}: {e}")
+        logger.exception("Failed to refresh token for user {}", token.user_id)
         return False
 
 

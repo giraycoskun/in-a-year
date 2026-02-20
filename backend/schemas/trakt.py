@@ -34,6 +34,7 @@ class SyncHistoryRequest(BaseModel):
 class SyncHistoryResponse(BaseModel):
     synced_count: int
     message: str
+    last_tracked_sync_at: datetime | None = None
 
 
 class MovieStats(BaseModel):

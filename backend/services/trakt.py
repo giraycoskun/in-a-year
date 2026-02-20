@@ -1,12 +1,12 @@
 import calendar
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.config import TRAKT_API_URL, TRAKT_CLIENT_ID, TRAKT_CLIENT_SECRET
-from backend.db.models.trakt import TraktToken, WatchHistory
+from backend.db.models.trakt import TraktSyncState, TraktToken, WatchHistory
 
 
 def get_date_range(year: int, month: int | None = None) -> tuple[datetime, datetime]:
@@ -41,6 +41,12 @@ class TraktService:
         if access_token:
             headers["Authorization"] = f"Bearer {access_token}"
         return headers
+
+    @staticmethod
+    def _to_utc_naive(value: datetime) -> datetime:
+        if value.tzinfo is None:
+            return value
+        return value.astimezone(timezone.utc).replace(tzinfo=None)
 
     async def get_device_code(self) -> dict:
         """Generate device code for OAuth2 device flow."""
@@ -112,6 +118,11 @@ class TraktService:
     async def get_token(self, user_id: str) -> TraktToken | None:
         """Get stored token for a user."""
         stmt = select(TraktToken).where(TraktToken.user_id == user_id)
+        result = await self.db.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def get_sync_state(self, user_id: str) -> TraktSyncState | None:
+        stmt = select(TraktSyncState).where(TraktSyncState.user_id == user_id)
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
@@ -254,6 +265,138 @@ class TraktService:
 
         await self.db.commit()
         return count
+
+    async def fetch_tracked_items(self, user_id: str, media_type: str) -> list[dict]:
+        """Fetch tracked (watched summary) movies or shows from Trakt."""
+        access_token = await self.get_valid_token(user_id)
+        url = f"{self.api_url}/users/me/watched/{media_type}"
+
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, headers=self._get_headers(access_token), timeout=60.0)
+            response.raise_for_status()
+            return response.json()
+
+    async def process_and_store_tracked_items(
+        self,
+        user_id: str,
+        movies: list[dict],
+        shows: list[dict],
+        last_sync_at: datetime | None = None,
+    ) -> tuple[int, datetime | None]:
+        """Store tracked movies and tracked TV shows in watch_history."""
+        count = 0
+        latest_seen: datetime | None = None
+        normalized_last_sync = self._to_utc_naive(last_sync_at) if last_sync_at else None
+
+        for item in movies:
+            movie = item.get("movie", {})
+            movie_ids = movie.get("ids", {})
+            trakt_id = movie_ids.get("trakt")
+            watched_at_raw = item.get("last_watched_at")
+            title = movie.get("title")
+
+            if not trakt_id or not watched_at_raw or not title:
+                continue
+
+            watched_at = self._to_utc_naive(datetime.fromisoformat(watched_at_raw.replace("Z", "+00:00")))
+            if normalized_last_sync and watched_at <= normalized_last_sync:
+                continue
+
+            if latest_seen is None or watched_at > latest_seen:
+                latest_seen = watched_at
+            stmt = select(WatchHistory).where(
+                WatchHistory.user_id == user_id,
+                WatchHistory.trakt_id == trakt_id,
+                WatchHistory.watched_at == watched_at,
+            )
+            result = await self.db.execute(stmt)
+            existing = result.scalar_one_or_none()
+
+            if existing:
+                continue
+
+            watch_entry = WatchHistory(
+                user_id=user_id,
+                trakt_id=trakt_id,
+                title=title,
+                media_type="movie",
+                watched_at=watched_at,
+                runtime_minutes=movie.get("runtime"),
+                year=movie.get("year"),
+                season=None,
+                episode=None,
+                show_title=None,
+            )
+            self.db.add(watch_entry)
+            count += 1
+
+        for item in shows:
+            show = item.get("show", {})
+            show_ids = show.get("ids", {})
+            trakt_id = show_ids.get("trakt")
+            watched_at_raw = item.get("last_watched_at")
+            show_title = show.get("title")
+
+            if not trakt_id or not watched_at_raw or not show_title:
+                continue
+
+            watched_at = self._to_utc_naive(datetime.fromisoformat(watched_at_raw.replace("Z", "+00:00")))
+            if normalized_last_sync and watched_at <= normalized_last_sync:
+                continue
+
+            if latest_seen is None or watched_at > latest_seen:
+                latest_seen = watched_at
+            stmt = select(WatchHistory).where(
+                WatchHistory.user_id == user_id,
+                WatchHistory.trakt_id == trakt_id,
+                WatchHistory.watched_at == watched_at,
+            )
+            result = await self.db.execute(stmt)
+            existing = result.scalar_one_or_none()
+
+            if existing:
+                continue
+
+            watch_entry = WatchHistory(
+                user_id=user_id,
+                trakt_id=trakt_id,
+                title=show_title,
+                media_type="show",
+                watched_at=watched_at,
+                runtime_minutes=None,
+                year=show.get("year"),
+                season=None,
+                episode=None,
+                show_title=show_title,
+            )
+            self.db.add(watch_entry)
+            count += 1
+
+        return count, latest_seen
+
+    async def sync_tracked_movies_and_shows(self, user_id: str) -> tuple[int, datetime | None]:
+        """Sync tracked movies and TV shows from Trakt into watch_history."""
+        sync_state = await self.get_sync_state(user_id)
+        last_sync_at = sync_state.last_tracked_sync_at if sync_state else None
+
+        movies = await self.fetch_tracked_items(user_id, "movies")
+        shows = await self.fetch_tracked_items(user_id, "shows")
+        count, latest_seen = await self.process_and_store_tracked_items(
+            user_id=user_id,
+            movies=movies,
+            shows=shows,
+            last_sync_at=last_sync_at,
+        )
+
+        if latest_seen:
+            if sync_state:
+                sync_state.last_tracked_sync_at = latest_seen
+            else:
+                sync_state = TraktSyncState(user_id=user_id, last_tracked_sync_at=latest_seen)
+                self.db.add(sync_state)
+            await self.db.commit()
+
+        return count, (sync_state.last_tracked_sync_at if sync_state else last_sync_at)
 
     async def sync_user_history(
         self,

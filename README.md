@@ -1,22 +1,25 @@
 # In a Year
 
-<!--intro-start-->
+`In a Year` shows yearly stats from connected services like Trakt and Hardcover.
 
-Projects aims to show in a year stats from connected services such as Spotify for music, GitHub for Code, Hardcover for books Trakt for movies/tv and more to come.
+## Stack
 
-## Features
+- Backend: FastAPI + SQLAlchemy
+- Frontend: Nuxt 3 + Tailwind
+- Data/Jobs: PostgreSQL + Redis + Celery
 
-- Upload your data/fetch from connected services
-- Data is processed into PostgreSQL database
-- Backend API built with FastAPI
-- Frontend built with Nuxt
-- Visualize your data with interactive charts and graphs
+## Quick Start
 
-<!--intro-end-->
+1. Copy env file:
+   `cp .env.example .env`
+2. Start infra:
+   `docker compose -f docker-compose-dev.yml up -d db redis`
+3. Run backend:
+   `uv run uvicorn backend.main:app --reload --port 8000`
+4. Run frontend:
+   `cd frontend && npm install && npm run dev`
 
-## Connected Services
+## API
 
-<div style="display: flex; gap: 30px;">
-    <img src="./docs/assets/trakt-icon.svg" width="120">
-    <img src="./docs/assets/hardcover-icon.png" width="120">
-</div>
+- Base URL: `http://localhost:8000/api/v1`
+- Docs: `http://localhost:8000/docs`

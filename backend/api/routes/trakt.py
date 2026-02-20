@@ -100,6 +100,26 @@ async def sync_history(
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@router.post("/sync/tracked", response_model=SyncHistoryResponse)
+async def sync_tracked_movies_and_shows(
+    user_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Sync tracked movies and tracked TV shows from Trakt."""
+    service = TraktService(db)
+    try:
+        count, last_tracked_sync_at = await service.sync_tracked_movies_and_shows(user_id)
+        return SyncHistoryResponse(
+            synced_count=count,
+            message=f"Successfully synced {count} tracked movie/show entries",
+            last_tracked_sync_at=last_tracked_sync_at,
+        )
+    except TraktAuthError as e:
+        if str(e) == "not_authenticated":
+            raise HTTPException(status_code=401, detail="User not authenticated with Trakt")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @router.get("/stats/{year}", response_model=YearStatsResponse)
 async def get_trakt_stats(
     year: int,
